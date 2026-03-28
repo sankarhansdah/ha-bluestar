@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Blue Star AC Control Lab</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Blue Star Control Lab</p>
+        <div class="hero-copy">
+          <h1>Probe the cloud path, watch live state, and drive the AC directly.</h1>
+          <p>
+            This is a test harness around the app protocol we mapped: Blue Star login, device discovery, AWS IoT shadow updates,
+            and live reported state.
+          </p>
+        </div>
+      </header>
+
+      <main class="app-grid">
+        <section class="panel panel-login" id="login-panel">
+          <div class="panel-header">
+            <p class="eyebrow">Account</p>
+            <h2>Session</h2>
+          </div>
+
+          <form id="login-form" class="stack">
+            <label class="field">
+              <span>Blue Star email or phone</span>
+              <input id="auth-id" name="authId" autocomplete="username" required>
+            </label>
+
+            <label class="field">
+              <span>Password</span>
+              <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </label>
+
+            <div class="actions">
+              <button type="submit" class="button button-primary">Log In</button>
+              <button type="button" class="button button-ghost" id="logout-button">Log Out</button>
+              <button type="button" class="button button-ghost" id="refresh-button">Refresh</button>
+              <button type="button" class="button button-ghost" id="debug-button">Debug</button>
+            </div>
+          </form>
+
+          <dl class="status-grid">
+            <div>
+              <dt>Cloud</dt>
+              <dd id="auth-status">Disconnected</dd>
+            </div>
+            <div>
+              <dt>MQTT</dt>
+              <dd id="mqtt-status">Idle</dd>
+            </div>
+            <div>
+              <dt>Devices</dt>
+              <dd id="device-count">0</dd>
+            </div>
+            <div>
+              <dt>Last refresh</dt>
+              <dd id="last-refresh">Never</dd>
+            </div>
+          </dl>
+
+          <div class="message-strip" id="message-strip" hidden></div>
+
+          <details class="debug-box">
+            <summary>API debug</summary>
+            <dl class="status-grid">
+              <div>
+                <dt>`/things` items</dt>
+                <dd id="debug-things-count">0</dd>
+              </div>
+              <div>
+                <dt>`/things` states</dt>
+                <dd id="debug-states-count">0</dd>
+              </div>
+              <div>
+                <dt>`/groups` items</dt>
+                <dd id="debug-groups-count">0</dd>
+              </div>
+              <div>
+                <dt>`/things` keys</dt>
+                <dd id="debug-things-keys">-</dd>
+              </div>
+            </dl>
+
+            <pre class="state-json debug-json" id="debug-json">No debug payload yet.</pre>
+          </details>
+        </section>
+
+        <section class="panel panel-devices">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Fleet</p>
+              <h2>Devices</h2>
+            </div>
+            <p class="subtle">
+              The page exposes the common controls directly and includes an exact app-command runner plus raw JSON patching for protocol tests.
+            </p>
+          </div>
+
+          <div id="devices" class="device-grid">
+            <article class="empty-state">
+              <h3>No session yet</h3>
+              <p>Log in to fetch your AC inventory and start the MQTT bridge.</p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="device-template">
+      <article class="device-card">
+        <header class="device-header">
+          <div>
+            <p class="eyebrow device-model"></p>
+            <h3 class="device-name"></h3>
+          </div>
+          <span class="status-pill"></span>
+        </header>
+
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-label">Current</span>
+            <strong class="metric-current"></strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Target</span>
+            <strong class="metric-target"></strong>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Mode</span>
+            <strong class="metric-mode"></strong>
+          </div>
+        </div>
+
+        <div class="control-block">
+          <div class="control-row">
+            <button class="button button-primary action-power-on" type="button">Power On</button>
+            <button class="button button-ghost action-power-off" type="button">Power Off</button>
+            <button class="button button-ghost action-sync" type="button">Force Sync</button>
+          </div>
+
+          <div class="mode-group"></div>
+
+          <div class="field-inline">
+            <label>
+              <span>Target temperature</span>
+              <input class="temp-range" type="range">
+            </label>
+            <div class="temp-inline">
+              <input class="temp-number" type="number" step="1">
+              <button class="button button-ghost action-set-temp" type="button">Apply</button>
+            </div>
+          </div>
+
+          <div class="field-inline">
+            <label>
+              <span>Fan speed</span>
+              <select class="fan-select"></select>
+            </label>
+            <button class="button button-ghost action-set-fan" type="button">Apply</button>
+          </div>
+
+          <details class="advanced-box">
+            <summary>Exact app command</summary>
+            <div class="field-inline">
+              <label>
+                <span>Command</span>
+                <select class="exact-command-select"></select>
+              </label>
+            </div>
+            <p class="subtle exact-command-description"></p>
+            <label class="field">
+              <span>Parameters JSON</span>
+              <textarea class="exact-command-params" rows="8" spellcheck="false"></textarea>
+            </label>
+            <button class="button button-ghost action-run-command" type="button">Run Exact Command</button>
+          </details>
+
+          <details class="advanced-box">
+            <summary>Raw JSON patch</summary>
+            <label class="field">
+              <span>Publish directly to the desired shadow document</span>
+              <textarea class="raw-payload" rows="5" spellcheck="false"></textarea>
+            </label>
+            <button class="button button-ghost action-send-raw" type="button">Send Raw Patch</button>
+          </details>
+        </div>
+
+        <details class="state-box">
+          <summary>Reported state</summary>
+          <pre class="state-json"></pre>
+        </details>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

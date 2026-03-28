@@ -1,0 +1,12 @@
+.DS_Store
+
+__pycache__/
+*.pyc
+
+webapp/node_modules/
+
+Blue Star Smart AC_4.13.12_APKPure.xapk
+apktool_base/
+extracted/
+jadx_out/
+xapk_contents/

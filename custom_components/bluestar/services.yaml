@@ -1,0 +1,75 @@
+execute_command:
+  name: Execute exact command
+  description: Send an exact Blue Star app-style command sequence to a device over AWS IoT MQTT.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry ID. Required only when multiple Blue Star accounts are configured.
+      example: "01JQ7B0J7Z2Y6W8F5A4C3D2E1F"
+      selector:
+        text:
+    thing_id:
+      name: Thing ID
+      description: Blue Star device ID from the cloud inventory.
+      required: true
+      example: "24587ca091f8"
+      selector:
+        text:
+    command:
+      name: Command
+      description: Exact command name from the mapped app protocol, such as `power`, `mode`, `turbo`, `climate`, or `preference`.
+      required: true
+      example: "mode"
+      selector:
+        text:
+    params:
+      name: Parameters
+      description: JSON object of command parameters. Refer to `findings.md` for the supported commands and payload shapes.
+      example:
+        value: 2
+        temperature: "24.0"
+        fanSpeed: 4
+      selector:
+        object:
+
+force_sync:
+  name: Force sync
+  description: Publish the same `fpsh` force-refresh message the mobile app uses.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry ID. Required only when multiple Blue Star accounts are configured.
+      selector:
+        text:
+    thing_id:
+      name: Thing ID
+      description: Blue Star device ID from the cloud inventory.
+      required: true
+      example: "24587ca091f8"
+      selector:
+        text:
+
+send_raw_patch:
+  name: Send raw patch
+  description: Publish a raw desired-state JSON patch directly to the device shadow.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry ID. Required only when multiple Blue Star accounts are configured.
+      selector:
+        text:
+    thing_id:
+      name: Thing ID
+      description: Blue Star device ID from the cloud inventory.
+      required: true
+      example: "24587ca091f8"
+      selector:
+        text:
+    payload:
+      name: Payload
+      description: Raw desired-state payload object to send.
+      required: true
+      example:
+        pow: 1
+      selector:
+        object:

@@ -1,0 +1,14 @@
+{
+  "name": "bluestar-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone test web app for Blue Star Smart AC cloud control.",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs && node --check public/app.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.13.3"
+  }
+}

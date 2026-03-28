@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Blue Star Smart AC",
+        "description": "Sign in with the same account used by the Blue Star mobile app.",
+        "data": {
+          "auth_id": "Email or phone number",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid credentials",
+      "cannot_connect": "Unable to connect to Blue Star cloud"
+    },
+    "abort": {
+      "already_configured": "This account is already configured"
+    }
+  }
+}
