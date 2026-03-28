@@ -7,7 +7,6 @@ from homeassistant.components.climate.const import ClimateEntityFeature, HVACMod
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -18,7 +17,6 @@ from .models import ThingData
 
 ATTR_HVAC_MODE = "hvac_mode"
 ATTR_TEMPERATURE = "temperature"
-ENTITY_DOMAIN = "climate"
 
 
 def _c_to_f(value: float) -> float:
@@ -52,32 +50,8 @@ async def async_setup_entry(
     coordinator = data.coordinator
     runtime = data.runtime
     known_ids: set[str] = set()
-    entity_registry = er.async_get(hass)
-
-    def _cleanup_legacy_registry_entries() -> None:
-        active_thing_ids = set(coordinator.data)
-        if not active_thing_ids:
-            return
-
-        for registry_entry in list(entity_registry.entities.values()):
-            if registry_entry.platform != DOMAIN or registry_entry.domain != ENTITY_DOMAIN:
-                continue
-
-            unique_id = registry_entry.unique_id
-            if unique_id in active_thing_ids:
-                continue
-
-            matched_thing_id = next(
-                (thing_id for thing_id in active_thing_ids if unique_id.endswith(f"_{thing_id}")),
-                None,
-            )
-            if matched_thing_id is None:
-                continue
-
-            entity_registry.async_remove(registry_entry.entity_id)
 
     def _add_missing_entities() -> None:
-        _cleanup_legacy_registry_entries()
         new_entities: list[BluestarClimateEntity] = []
         for thing_id in sorted(coordinator.data):
             if thing_id in known_ids:
@@ -114,7 +88,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     @property
     def unique_id(self) -> str:
-        return self._thing_id
+        return f"{self._entry_id}_{self._thing_id}"
 
     @property
     def name(self) -> str:
