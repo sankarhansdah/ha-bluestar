@@ -84,7 +84,10 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     @property
     def _thing(self) -> ThingData | None:
-        return self.coordinator.data.get(self._thing_id)
+        data = self.coordinator.data
+        if not data:
+            return None
+        return data.get(self._thing_id)
 
     @property
     def unique_id(self) -> str:
@@ -97,7 +100,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     @property
     def available(self) -> bool:
-        return self._thing is not None
+        return self._thing is not None and self._runtime.mqtt_connected
 
     @property
     def should_poll(self) -> bool:

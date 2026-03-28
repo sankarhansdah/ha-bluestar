@@ -89,12 +89,14 @@ class BluestarMqttClient:
         thing_ids: Collection[str],
         state_callback: Callable[[str, dict], None],
         presence_callback: Callable[[str, bool, int], None],
+        connection_callback: Callable[[], None] | None = None,
     ) -> None:
         self._broker_info = broker_info
         self._session_id = session_id
         self._thing_ids = set(thing_ids)
         self._state_callback = state_callback
         self._presence_callback = presence_callback
+        self._connection_callback = connection_callback
         self._client: mqtt.Client | None = None
         self._connected = threading.Event()
         self._subscribed_topics: set[str] = set()
@@ -189,6 +191,8 @@ class BluestarMqttClient:
         if rc != 0:
             _LOGGER.warning("Blue Star MQTT connect failed with reason code %s", rc)
             self._connected.clear()
+            if self._connection_callback:
+                self._connection_callback()
             return
 
         self._connected.set()
@@ -197,12 +201,16 @@ class BluestarMqttClient:
             client.subscribe(topic, qos=1)
         self._subscribed_topics = self._desired_topics()
         _LOGGER.debug("Blue Star MQTT connected")
+        if self._connection_callback:
+            self._connection_callback()
 
     def _on_disconnect(self, client: mqtt.Client, userdata, reason_code, properties=None) -> None:
         self._connected.clear()
         self._subscribed_topics.clear()
         rc = getattr(reason_code, "value", reason_code)
         _LOGGER.debug("Blue Star MQTT disconnected: %s", rc)
+        if self._connection_callback:
+            self._connection_callback()
 
     def _on_message(self, client: mqtt.Client, userdata, message: mqtt.MQTTMessage) -> None:
         try:

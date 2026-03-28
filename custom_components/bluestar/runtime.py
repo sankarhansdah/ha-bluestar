@@ -112,6 +112,7 @@ class BluestarRuntime:
         await self.hass.async_add_executor_job(self._mqtt.force_sync, thing_id)
 
     async def async_shutdown(self) -> None:
+        self._update_callback = None
         mqtt_client = self._mqtt
         self._mqtt = None
         if mqtt_client is not None:
@@ -178,6 +179,7 @@ class BluestarRuntime:
             thing_ids=set(self.devices),
             state_callback=self.handle_state_report,
             presence_callback=self.handle_presence,
+            connection_callback=self._push_updates,
         )
 
         if previous is not None:
