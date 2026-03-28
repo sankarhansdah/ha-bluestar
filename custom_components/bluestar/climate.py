@@ -5,7 +5,7 @@ from typing import Any
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import ClimateEntityFeature, HVACMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_HVAC_MODE, ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -14,6 +14,9 @@ from . import BluestarEntryData
 from .const import DOMAIN
 from .coordinator import BluestarCoordinator
 from .models import ThingData
+
+ATTR_HVAC_MODE = "hvac_mode"
+ATTR_TEMPERATURE = "temperature"
 
 
 def _c_to_f(value: float) -> float:
