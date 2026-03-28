@@ -97,7 +97,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     @property
     def available(self) -> bool:
-        return self._thing is not None and self._runtime.ready
+        return self._thing is not None
 
     @property
     def should_poll(self) -> bool:
