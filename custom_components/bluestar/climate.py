@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.climate import ClimateEntity
-from homeassistant.components.climate.const import ClimateEntityFeature, HVACMode
+from homeassistant.components.climate.const import (
+    SWING_OFF,
+    SWING_ON,
+    ClimateEntityFeature,
+    HVACMode,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
@@ -165,7 +170,49 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
         features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
         if thing.fan_options():
             features |= ClimateEntityFeature.FAN_MODE
+        if self._vertical_swing_supported(thing):
+            features |= ClimateEntityFeature.SWING_MODE
+        if self._horizontal_swing_supported(thing):
+            features |= ClimateEntityFeature.SWING_HORIZONTAL_MODE
         return features
+
+    def _state_temperature_c(self, thing: ThingData, key: str) -> float | None:
+        return _coerce_float(thing.state.raw.get(key))
+
+    def _swing_angles(self, thing: ThingData, key: str) -> dict[int, str]:
+        payload = thing.model_config.get(key) or {}
+        if not isinstance(payload, dict):
+            return {}
+
+        angles = payload.get("angles") or {}
+        if not isinstance(angles, dict):
+            return {}
+
+        options: dict[int, str] = {}
+        for raw_value, label in angles.items():
+            try:
+                options[int(raw_value)] = str(label)
+            except (TypeError, ValueError):
+                continue
+        return options
+
+    def _vertical_swing_supported(self, thing: ThingData) -> bool:
+        return bool(self._swing_angles(thing, "vswing"))
+
+    def _horizontal_swing_supported(self, thing: ThingData) -> bool:
+        return bool(self._swing_angles(thing, "hswing"))
+
+    def _vertical_swing_on_value(self, thing: ThingData) -> int:
+        return 5 if thing.model_type == 2 else 0
+
+    def _vertical_swing_off_value(self) -> int:
+        return 6
+
+    def _horizontal_swing_on_value(self) -> int:
+        return 6
+
+    def _horizontal_swing_off_value(self) -> int:
+        return 0
 
     @property
     def temperature_unit(self) -> str:
@@ -194,14 +241,14 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
         thing = self._thing
         if thing is None:
             return None
-        return _coerce_float(thing.state.raw.get("ctemp"))
+        return self._state_temperature_c(thing, "ctemp")
 
     @property
     def target_temperature(self) -> float | None:
         thing = self._thing
         if thing is None:
             return None
-        return _coerce_float(thing.state.raw.get("stemp"))
+        return self._state_temperature_c(thing, "stemp")
 
     def _mode_label_to_hvac(self, label: str) -> HVACMode | None:
         label = label.lower()
@@ -275,6 +322,42 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
             return None
         return thing.fan_options().get(fan_value)
 
+    @property
+    def swing_modes(self) -> list[str] | None:
+        thing = self._thing
+        if thing is None or not self._vertical_swing_supported(thing):
+            return None
+        return [SWING_OFF, SWING_ON]
+
+    @property
+    def swing_mode(self) -> str | None:
+        thing = self._thing
+        if thing is None or not self._vertical_swing_supported(thing):
+            return None
+
+        current_value = _coerce_int(thing.state.raw.get("vswing"))
+        if current_value == self._vertical_swing_on_value(thing):
+            return SWING_ON
+        return SWING_OFF
+
+    @property
+    def swing_horizontal_modes(self) -> list[str] | None:
+        thing = self._thing
+        if thing is None or not self._horizontal_swing_supported(thing):
+            return None
+        return [SWING_OFF, SWING_ON]
+
+    @property
+    def swing_horizontal_mode(self) -> str | None:
+        thing = self._thing
+        if thing is None or not self._horizontal_swing_supported(thing):
+            return None
+
+        current_value = _coerce_int(thing.state.raw.get("hswing"))
+        if current_value == self._horizontal_swing_on_value():
+            return SWING_ON
+        return SWING_OFF
+
     async def async_turn_off(self) -> None:
         await self._runtime.async_execute_exact_command(self._thing_id, "power", {"value": False})
 
@@ -337,3 +420,19 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
             if label == target:
                 await self._runtime.async_execute_exact_command(self._thing_id, "fan", {"value": value})
                 return
+
+    async def async_set_swing_mode(self, swing_mode: str) -> None:
+        thing = self._thing
+        if thing is None or not self._vertical_swing_supported(thing):
+            return
+
+        target_value = self._vertical_swing_on_value(thing) if swing_mode == SWING_ON else self._vertical_swing_off_value()
+        await self._runtime.async_execute_exact_command(self._thing_id, "vertical-swing", {"value": target_value})
+
+    async def async_set_swing_horizontal_mode(self, swing_horizontal_mode: str) -> None:
+        thing = self._thing
+        if thing is None or not self._horizontal_swing_supported(thing):
+            return
+
+        target_value = self._horizontal_swing_on_value() if swing_horizontal_mode == SWING_ON else self._horizontal_swing_off_value()
+        await self._runtime.async_execute_exact_command(self._thing_id, "horizontal-swing", {"value": target_value})

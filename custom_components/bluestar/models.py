@@ -20,6 +20,23 @@ def _coerce_float(value: Any, default: float | None = None) -> float | None:
         return default
 
 
+def _f_to_c(value: float) -> float:
+    return round(((value - 32.0) * 5.0) / 9.0, 1)
+
+
+def _normalize_state_temperatures(payload: dict[str, Any], default_displayunit: int = 0) -> dict[str, Any]:
+    normalized = dict(payload)
+    displayunit = _coerce_int(normalized.get("displayunit"), default_displayunit)
+    if displayunit != 1:
+        return normalized
+
+    for key in ("stemp", "ctemp"):
+        value = _coerce_float(normalized.get(key))
+        if value is not None:
+            normalized[key] = f"{_f_to_c(value):.1f}"
+    return normalized
+
+
 @dataclass(slots=True, frozen=True)
 class BrokerInfo:
     endpoint: str
@@ -41,7 +58,10 @@ class ThingStateData:
 
         state_payload = payload.get("state") or {}
         if isinstance(state_payload, dict):
-            self.raw = dict(state_payload)
+            self.raw = _normalize_state_temperatures(
+                state_payload,
+                _coerce_int(self.raw.get("displayunit"), 0),
+            )
 
         self.state_ts = state_ts
         self.connected = bool(payload.get("connected", self.connected))
@@ -53,7 +73,10 @@ class ThingStateData:
         if state_ts < self.state_ts:
             return False
 
-        self.raw = dict(payload)
+        self.raw = _normalize_state_temperatures(
+            payload,
+            _coerce_int(self.raw.get("displayunit"), 0),
+        )
         self.state_ts = state_ts
         return True
 
