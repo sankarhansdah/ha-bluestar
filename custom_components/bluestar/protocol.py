@@ -133,6 +133,17 @@ def _normalize_temperature_to_celsius(thing: ThingData, value: Any) -> str | Non
     return f"{parsed:.1f}"
 
 
+def _normalize_cached_temperatures_to_celsius(state: dict[str, Any], old_displayunit: int, new_displayunit: int) -> None:
+    if old_displayunit != 1 or new_displayunit == 1:
+        return
+
+    for key in ("stemp", "ctemp"):
+        parsed = _coerce_float(state.get(key))
+        if parsed is None:
+            continue
+        state[key] = f"{_f_to_c(parsed):.1f}"
+
+
 def _integer_temperature_string(thing: ThingData, value_c: float) -> str:
     if thing.display_uses_fahrenheit():
         return str(_c_to_f(value_c))
@@ -523,6 +534,7 @@ def build_exact_command_sequence(thing: ThingData, command: str, params: Mapping
 
 def apply_optimistic_payload(thing: ThingData, payload: Mapping[str, Any], timestamp_ms: int) -> None:
     next_state = dict(thing.state.raw)
+    old_displayunit = _coerce_int(next_state.get("displayunit"), 0) or 0
 
     for key, value in payload.items():
         if key == "mode" and isinstance(value, Mapping):
@@ -551,6 +563,10 @@ def apply_optimistic_payload(thing: ThingData, payload: Mapping[str, Any], times
             next_state[key] = normalized_temperature or value
         else:
             next_state[key] = value
+
+    new_displayunit = _coerce_int(next_state.get("displayunit"), old_displayunit)
+    if new_displayunit is not None:
+        _normalize_cached_temperatures_to_celsius(next_state, old_displayunit, new_displayunit)
 
     thing.state.raw = next_state
     if timestamp_ms >= thing.state.state_ts:
