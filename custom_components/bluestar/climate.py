@@ -88,7 +88,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     @property
     def unique_id(self) -> str:
-        return f"{self._entry_id}_{self._thing_id}"
+        return self._thing_id
 
     @property
     def name(self) -> str:
