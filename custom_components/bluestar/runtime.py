@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Callable
 from typing import Any
@@ -18,6 +19,8 @@ from .protocol import (
     apply_optimistic_payload,
     build_exact_command_sequence,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class BluestarRuntime:
@@ -65,10 +68,13 @@ class BluestarRuntime:
         devices = self._parse_devices(payload)
         self.devices = devices
 
-        if session_changed or self._mqtt is None:
-            await self._async_restart_mqtt()
-        elif self._mqtt is not None:
-            await self.hass.async_add_executor_job(self._mqtt.update_thing_ids, set(self.devices))
+        try:
+            if session_changed or self._mqtt is None:
+                await self._async_restart_mqtt()
+            elif self._mqtt is not None:
+                await self.hass.async_add_executor_job(self._mqtt.update_thing_ids, set(self.devices))
+        except Exception as err:  # pragma: no cover - defensive startup resilience
+            _LOGGER.warning("Blue Star MQTT startup failed; continuing with cloud inventory only: %s", err)
 
         self.ready = True
         self._push_updates()
