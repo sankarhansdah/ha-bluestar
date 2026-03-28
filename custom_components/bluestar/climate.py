@@ -34,11 +34,11 @@ def _coerce_float(value: Any) -> float | None:
         return None
 
 
-def _coerce_int(value: Any) -> int | None:
+def _coerce_int(value: Any, default: int | None = None) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
-        return None
+        return default
 
 
 async def async_setup_entry(
