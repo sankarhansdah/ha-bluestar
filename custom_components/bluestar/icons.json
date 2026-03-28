@@ -1,0 +1,13 @@
+{
+  "services": {
+    "execute_command": {
+      "service": "mdi:air-conditioner"
+    },
+    "force_sync": {
+      "service": "mdi:sync"
+    },
+    "send_raw_patch": {
+      "service": "mdi:code-json"
+    }
+  }
+}

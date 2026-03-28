@@ -8,6 +8,8 @@ This repository contains:
 - a localhost protocol test webapp in [webapp](/Users/sankarkumarhansdah/Projects/Bluestar/webapp)
 - the reverse engineering notes in [findings.md](/Users/sankarkumarhansdah/Projects/Bluestar/findings.md)
 
+![Blue Star Smart AC icon](./custom_components/bluestar/brand/logo.png)
+
 Planned public repository:
 
 - `https://github.com/sankarhansdah/ha-bluestar`
@@ -19,6 +21,7 @@ Planned public repository:
 - exact app-style command execution through services
 - force-sync service
 - raw desired-shadow patch service
+- local brand images derived from the Android app icon
 
 ## HACS install
 

@@ -488,6 +488,8 @@ What this means:
 - The repo is structured correctly for HACS as a custom integration repository.
 - Users can install it from HACS as a custom repository once it is on public GitHub.
 - The integration metadata is now wired for `https://github.com/sankarhansdah/ha-bluestar`.
+- The Home Assistant integration now includes local brand images from the Android app launcher icon at [custom_components/bluestar/brand/icon.png](/Users/sankarkumarhansdah/Projects/Bluestar/custom_components/bluestar/brand/icon.png) and [custom_components/bluestar/brand/logo.png](/Users/sankarkumarhansdah/Projects/Bluestar/custom_components/bluestar/brand/logo.png).
+- Service actions now have custom icons via [custom_components/bluestar/icons.json](/Users/sankarkumarhansdah/Projects/Bluestar/custom_components/bluestar/icons.json).
 
 ## Known gaps
 
