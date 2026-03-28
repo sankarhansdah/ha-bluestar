@@ -5,7 +5,7 @@ from datetime import timedelta
 from homeassistant.const import Platform
 
 DOMAIN = "bluestar"
-PLATFORMS: list[Platform] = [Platform.CLIMATE]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SELECT, Platform.SWITCH]
 
 SERVICE_EXECUTE_COMMAND = "execute_command"
 SERVICE_FORCE_SYNC = "force_sync"

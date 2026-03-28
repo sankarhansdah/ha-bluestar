@@ -98,6 +98,10 @@ def _c_to_f(value_c: float) -> int:
     return round(((value_c * 9.0) / 5.0) + 32.0)
 
 
+def _f_to_c(value_f: float) -> float:
+    return round(((value_f - 32.0) * 5.0) / 9.0)
+
+
 def _parse_firmware(version: Any) -> tuple[int, int]:
     major_raw, _, minor_raw = str(version or "0.0").partition(".")
     return _coerce_int(major_raw, 0) or 0, _coerce_int(minor_raw, 0) or 0
@@ -115,6 +119,17 @@ def _display_value_string(thing: ThingData, value: Any) -> str:
     parsed = _coerce_float(value)
     if parsed is None:
         raise BluestarProtocolError("Temperature must be numeric")
+    if thing.display_uses_fahrenheit():
+        parsed = _c_to_f(parsed)
+    return f"{parsed:.1f}"
+
+
+def _normalize_temperature_to_celsius(thing: ThingData, value: Any) -> str | None:
+    parsed = _coerce_float(value)
+    if parsed is None:
+        return None
+    if thing.display_uses_fahrenheit():
+        parsed = _f_to_c(parsed)
     return f"{parsed:.1f}"
 
 
@@ -156,7 +171,10 @@ def _turbo_fan_value(thing: ThingData) -> int | None:
 
 def _mode_temperature_value(thing: ThingData, mode_value: int, override: Any = None) -> str | None:
     if override not in (None, ""):
-        return str(override)
+        parsed = _coerce_float(override)
+        if parsed is None:
+            return str(override)
+        return _format_mode_temperature_from_celsius(thing, parsed)
 
     configured = thing.configured_temperature_for_mode(mode_value)
     if configured in (None, ""):
@@ -511,7 +529,8 @@ def apply_optimistic_payload(thing: ThingData, payload: Mapping[str, Any], times
             if value.get("value") not in (None, ""):
                 next_state["mode"] = value["value"]
             if value.get("stemp") not in (None, ""):
-                next_state["stemp"] = str(value["stemp"])
+                normalized_temperature = _normalize_temperature_to_celsius(thing, value["stemp"])
+                next_state["stemp"] = normalized_temperature or str(value["stemp"])
             if value.get("fspd") not in (None, ""):
                 next_state["fspd"] = value["fspd"]
             continue
@@ -520,10 +539,18 @@ def apply_optimistic_payload(thing: ThingData, payload: Mapping[str, Any], times
             next_state[key] = value["value"]
             for child_key in ("mode", "stemp", "fspd", "hswing", "vswing", "irest_tmr"):
                 if value.get(child_key) not in (None, ""):
-                    next_state[child_key] = value[child_key]
+                    if child_key == "stemp":
+                        normalized_temperature = _normalize_temperature_to_celsius(thing, value[child_key])
+                        next_state[child_key] = normalized_temperature or value[child_key]
+                    else:
+                        next_state[child_key] = value[child_key]
             continue
 
-        next_state[key] = value
+        if key == "stemp":
+            normalized_temperature = _normalize_temperature_to_celsius(thing, value)
+            next_state[key] = normalized_temperature or value
+        else:
+            next_state[key] = value
 
     thing.state.raw = next_state
     if timestamp_ms >= thing.state.state_ts:

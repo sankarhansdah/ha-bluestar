@@ -7,6 +7,7 @@ from homeassistant.components.climate.const import ClimateEntityFeature, HVACMod
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -17,14 +18,7 @@ from .models import ThingData
 
 ATTR_HVAC_MODE = "hvac_mode"
 ATTR_TEMPERATURE = "temperature"
-
-
-def _c_to_f(value: float) -> float:
-    return round(((value * 9.0) / 5.0) + 32.0)
-
-
-def _f_to_c(value: float) -> float:
-    return round(((value - 32.0) * 5.0) / 9.0)
+ENTITY_DOMAIN = "climate"
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -50,8 +44,34 @@ async def async_setup_entry(
     coordinator = data.coordinator
     runtime = data.runtime
     known_ids: set[str] = set()
+    entity_registry = er.async_get(hass)
+
+    def _cleanup_legacy_registry_entries() -> None:
+        active_thing_ids = set(coordinator.data)
+        if not active_thing_ids:
+            return
+
+        for registry_entry in list(entity_registry.entities.values()):
+            if registry_entry.platform != DOMAIN or registry_entry.domain != ENTITY_DOMAIN:
+                continue
+            if getattr(registry_entry, "config_entry_id", entry.entry_id) != entry.entry_id:
+                continue
+
+            unique_id = registry_entry.unique_id
+            if unique_id in active_thing_ids:
+                continue
+
+            matched_thing_id = next(
+                (thing_id for thing_id in active_thing_ids if unique_id.endswith(f"_{thing_id}")),
+                None,
+            )
+            if matched_thing_id is None:
+                continue
+
+            entity_registry.async_remove(registry_entry.entity_id)
 
     def _add_missing_entities() -> None:
+        _cleanup_legacy_registry_entries()
         new_entities: list[BluestarClimateEntity] = []
         for thing_id in sorted(coordinator.data):
             if thing_id in known_ids:
@@ -91,7 +111,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     @property
     def unique_id(self) -> str:
-        return f"{self._entry_id}_{self._thing_id}"
+        return self._thing_id
 
     @property
     def name(self) -> str:
@@ -100,7 +120,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     @property
     def available(self) -> bool:
-        return self._thing is not None and self._runtime.mqtt_connected
+        return self._thing is not None
 
     @property
     def should_poll(self) -> bool:
@@ -147,34 +167,12 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
             features |= ClimateEntityFeature.FAN_MODE
         return features
 
-    def _display_uses_fahrenheit(self, thing: ThingData) -> bool:
-        return thing.display_uses_fahrenheit()
-
-    def _display_temp(self, thing: ThingData, value: float | None) -> float | None:
-        if value is None:
-            return None
-        if self._display_uses_fahrenheit(thing):
-            return _c_to_f(value)
-        return value
-
-    def _device_temp(self, thing: ThingData, value: float | None) -> float | None:
-        if value is None:
-            return None
-        if self._display_uses_fahrenheit(thing):
-            return _f_to_c(value)
-        return value
-
     @property
     def temperature_unit(self) -> str:
-        thing = self._thing
-        if thing is not None and self._display_uses_fahrenheit(thing):
-            return UnitOfTemperature.FAHRENHEIT
         return UnitOfTemperature.CELSIUS
 
     @property
     def target_temperature_step(self) -> float:
-        if self.temperature_unit == UnitOfTemperature.FAHRENHEIT:
-            return 1.0
         return 0.5
 
     @property
@@ -182,28 +180,28 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
         thing = self._thing
         if thing is None:
             return 16.0
-        return self._display_temp(thing, thing.min_temperature_c()) or 16.0
+        return thing.min_temperature_c() or 16.0
 
     @property
     def max_temp(self) -> float:
         thing = self._thing
         if thing is None:
             return 30.0
-        return self._display_temp(thing, thing.max_temperature_c()) or 30.0
+        return thing.max_temperature_c() or 30.0
 
     @property
     def current_temperature(self) -> float | None:
         thing = self._thing
         if thing is None:
             return None
-        return self._display_temp(thing, _coerce_float(thing.state.raw.get("ctemp")))
+        return _coerce_float(thing.state.raw.get("ctemp"))
 
     @property
     def target_temperature(self) -> float | None:
         thing = self._thing
         if thing is None:
             return None
-        return self._display_temp(thing, _coerce_float(thing.state.raw.get("stemp")))
+        return _coerce_float(thing.state.raw.get("stemp"))
 
     def _mode_label_to_hvac(self, label: str) -> HVACMode | None:
         label = label.lower()
