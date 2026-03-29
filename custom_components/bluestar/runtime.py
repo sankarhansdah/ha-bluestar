@@ -21,6 +21,9 @@ from .protocol import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+MQTT_RECONNECT_DELAY_SECONDS = 1
+MQTT_RECONNECT_TIMEOUT_SECONDS = 10
+MQTT_RECONNECT_POLL_INTERVAL_SECONDS = 0.25
 
 
 class BluestarRuntime:
@@ -35,6 +38,8 @@ class BluestarRuntime:
         self._session_id: str | None = None
         self._broker_info: BrokerInfo | None = None
         self._mqtt: BluestarMqttClient | None = None
+        self._mqtt_connect_lock = asyncio.Lock()
+        self._mqtt_reconnect_task: asyncio.Task[None] | None = None
         self._update_callback: Callable[[dict[str, ThingData]], None] | None = None
 
     def set_update_callback(self, callback: Callable[[dict[str, ThingData]], None]) -> None:
@@ -106,13 +111,16 @@ class BluestarRuntime:
                 await asyncio.sleep(COMMAND_DELAY_MS / 1000)
 
     async def async_force_sync(self, thing_id: str) -> None:
-        if self._mqtt is None or not self._mqtt.is_connected:
-            raise HomeAssistantError("Blue Star MQTT client is not connected")
+        await self._async_ensure_mqtt_connected()
 
         await self.hass.async_add_executor_job(self._mqtt.force_sync, thing_id)
 
     async def async_shutdown(self) -> None:
         self._update_callback = None
+        reconnect_task = self._mqtt_reconnect_task
+        self._mqtt_reconnect_task = None
+        if reconnect_task is not None:
+            reconnect_task.cancel()
         mqtt_client = self._mqtt
         self._mqtt = None
         if mqtt_client is not None:
@@ -179,7 +187,7 @@ class BluestarRuntime:
             thing_ids=set(self.devices),
             state_callback=self.handle_state_report,
             presence_callback=self.handle_presence,
-            connection_callback=self._push_updates,
+            connection_callback=self._handle_mqtt_connection_change,
         )
 
         if previous is not None:
@@ -187,8 +195,7 @@ class BluestarRuntime:
         await self.hass.async_add_executor_job(self._mqtt.connect)
 
     async def _async_publish_payload(self, thing: ThingData, payload: dict[str, Any]) -> None:
-        if self._mqtt is None or not self._mqtt.is_connected:
-            raise HomeAssistantError("Blue Star MQTT client is not connected")
+        await self._async_ensure_mqtt_connected()
 
         message = dict(payload)
         message["ts"] = int(message.get("ts") or (time.time() * 1000))
@@ -202,3 +209,60 @@ class BluestarRuntime:
 
         snapshot = dict(self.devices)
         self.hass.loop.call_soon_threadsafe(self._update_callback, snapshot)
+
+    def _handle_mqtt_connection_change(self) -> None:
+        self._push_updates()
+        if self.ready and not self.mqtt_connected:
+            self.hass.loop.call_soon_threadsafe(self._async_schedule_mqtt_reconnect)
+
+    def _async_schedule_mqtt_reconnect(self) -> None:
+        if self._mqtt_reconnect_task is not None and not self._mqtt_reconnect_task.done():
+            return
+        self._mqtt_reconnect_task = self.hass.async_create_task(self._async_background_mqtt_reconnect())
+
+    async def _async_background_mqtt_reconnect(self) -> None:
+        try:
+            await asyncio.sleep(MQTT_RECONNECT_DELAY_SECONDS)
+            await self._async_ensure_mqtt_connected()
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # pragma: no cover - best-effort recovery
+            _LOGGER.debug("Blue Star MQTT background reconnect failed: %s", err)
+
+    async def _async_ensure_mqtt_connected(self) -> None:
+        if self._mqtt is not None and self._mqtt.is_connected:
+            return
+
+        async with self._mqtt_connect_lock:
+            if self._mqtt is not None and self._mqtt.is_connected:
+                return
+
+            restart_error: Exception | None = None
+            if self._broker_info is not None and self._session_id is not None:
+                try:
+                    await self._async_restart_mqtt()
+                except Exception as err:  # pragma: no cover - defensive reconnect handling
+                    restart_error = err
+                    _LOGGER.debug("Blue Star MQTT restart failed: %s", err)
+
+                if await self._async_wait_for_mqtt_connection():
+                    return
+
+            try:
+                await self.async_refresh_devices(force_login=True)
+            except (BluestarApiError, BluestarAuthError) as err:
+                raise HomeAssistantError(f"Blue Star MQTT reconnect failed: {err}") from err
+            if await self._async_wait_for_mqtt_connection():
+                return
+
+        if restart_error is not None:
+            raise HomeAssistantError(f"Blue Star MQTT reconnect failed: {restart_error}") from restart_error
+        raise HomeAssistantError("Blue Star MQTT client could not reconnect")
+
+    async def _async_wait_for_mqtt_connection(self) -> bool:
+        deadline = self.hass.loop.time() + MQTT_RECONNECT_TIMEOUT_SECONDS
+        while self.hass.loop.time() < deadline:
+            if self._mqtt is not None and self._mqtt.is_connected:
+                return True
+            await asyncio.sleep(MQTT_RECONNECT_POLL_INTERVAL_SECONDS)
+        return self._mqtt is not None and self._mqtt.is_connected
