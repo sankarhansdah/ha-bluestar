@@ -156,6 +156,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
         return {
             "thing_id": thing.id,
             "device_online": thing.state.connected,
+            "mqtt_bridge_connected": self._runtime.mqtt_connected,
             "model_id": thing.model_id,
             "model_type": thing.model_type,
             "product_category": thing.product_category,
@@ -168,6 +169,8 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
     def supported_features(self) -> ClimateEntityFeature:
         thing = self._thing
         if thing is None:
+            return ClimateEntityFeature(0)
+        if not self._runtime.mqtt_connected:
             return ClimateEntityFeature(0)
 
         features = (
@@ -284,6 +287,8 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
         thing = self._thing
         if thing is None:
             return [HVACMode.OFF, HVACMode.COOL]
+        if not self._runtime.mqtt_connected:
+            return [self.hvac_mode]
 
         modes: list[HVACMode] = [HVACMode.OFF]
         for _, label in sorted(thing.mode_options().items()):
@@ -333,6 +338,8 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
     @property
     def preset_modes(self) -> list[str] | None:
         # Home Assistant's climate widget has no dedicated power control slot.
+        if not self._runtime.mqtt_connected:
+            return None
         return [POWER_PRESET_ON, POWER_PRESET_OFF]
 
     @property

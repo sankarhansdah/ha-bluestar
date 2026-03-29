@@ -22,7 +22,7 @@ from .protocol import (
 
 _LOGGER = logging.getLogger(__name__)
 MQTT_RECONNECT_DELAY_SECONDS = 1
-MQTT_RECONNECT_TIMEOUT_SECONDS = 10
+MQTT_RECONNECT_TIMEOUT_SECONDS = 30
 MQTT_RECONNECT_POLL_INTERVAL_SECONDS = 0.25
 
 
@@ -111,9 +111,7 @@ class BluestarRuntime:
                 await asyncio.sleep(COMMAND_DELAY_MS / 1000)
 
     async def async_force_sync(self, thing_id: str) -> None:
-        await self._async_ensure_mqtt_connected()
-
-        await self.hass.async_add_executor_job(self._mqtt.force_sync, thing_id)
+        await self._async_call_mqtt_method("force_sync", thing_id)
 
     async def async_shutdown(self) -> None:
         self._update_callback = None
@@ -195,11 +193,9 @@ class BluestarRuntime:
         await self.hass.async_add_executor_job(self._mqtt.connect)
 
     async def _async_publish_payload(self, thing: ThingData, payload: dict[str, Any]) -> None:
-        await self._async_ensure_mqtt_connected()
-
         message = dict(payload)
         message["ts"] = int(message.get("ts") or (time.time() * 1000))
-        await self.hass.async_add_executor_job(self._mqtt.publish_shadow_update, thing.id, message)
+        await self._async_call_mqtt_method("publish_shadow_update", thing.id, message)
         apply_optimistic_payload(thing, message, int(message["ts"]))
         self._push_updates()
 
@@ -258,6 +254,27 @@ class BluestarRuntime:
         if restart_error is not None:
             raise HomeAssistantError(f"Blue Star MQTT reconnect failed: {restart_error}") from restart_error
         raise HomeAssistantError("Blue Star MQTT client could not reconnect")
+
+    async def _async_call_mqtt_method(self, method_name: str, *args: Any) -> None:
+        last_error: RuntimeError | None = None
+        for attempt in range(2):
+            await self._async_ensure_mqtt_connected()
+            mqtt_client = self._mqtt
+            if mqtt_client is None:
+                raise HomeAssistantError("Blue Star MQTT client is not connected")
+
+            try:
+                method = getattr(mqtt_client, method_name)
+                await self.hass.async_add_executor_job(method, *args)
+                return
+            except RuntimeError as err:
+                last_error = err
+                if attempt == 1:
+                    break
+                _LOGGER.debug("Blue Star MQTT %s failed; reconnecting and retrying once: %s", method_name, err)
+
+        assert last_error is not None
+        raise HomeAssistantError(str(last_error)) from last_error
 
     async def _async_wait_for_mqtt_connection(self) -> bool:
         deadline = self.hass.loop.time() + MQTT_RECONNECT_TIMEOUT_SECONDS

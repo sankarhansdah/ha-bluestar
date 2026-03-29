@@ -77,7 +77,7 @@ class BluestarTemperatureUnitSelectEntity(CoordinatorEntity[BluestarCoordinator]
 
     @property
     def available(self) -> bool:
-        return self._thing is not None
+        return self._thing is not None and self._runtime.mqtt_connected
 
     @property
     def device_info(self) -> dict[str, Any]:

@@ -158,26 +158,44 @@ class BluestarMqttClient:
 
     def publish_shadow_update(self, thing_id: str, payload: dict) -> None:
         if self._client is None:
-            raise RuntimeError("MQTT client is not initialized")
+            raise RuntimeError("Blue Star MQTT client is not initialized")
+        if not self.is_connected:
+            raise RuntimeError("Blue Star MQTT client is not connected")
 
         message = dict(payload)
         message[SOURCE_KEY] = SOURCE_MQTT
         wrapped = {"state": {"desired": message}}
-        self._client.publish(
+        info = self._client.publish(
             f"$aws/things/{thing_id}/shadow/update",
             json.dumps(wrapped, separators=(",", ":")),
             qos=0,
         )
+        self._raise_for_publish_result(info, "shadow update")
 
     def force_sync(self, thing_id: str) -> None:
         if self._client is None:
-            raise RuntimeError("MQTT client is not initialized")
+            raise RuntimeError("Blue Star MQTT client is not initialized")
+        if not self.is_connected:
+            raise RuntimeError("Blue Star MQTT client is not connected")
 
-        self._client.publish(
+        info = self._client.publish(
             f"things/{thing_id}/control",
             json.dumps({FORCE_SYNC_KEY: 1}, separators=(",", ":")),
             qos=0,
         )
+        self._raise_for_publish_result(info, "control publish")
+
+    def _raise_for_publish_result(self, info: mqtt.MQTTMessageInfo, action: str) -> None:
+        result_code = getattr(info, "rc", mqtt.MQTT_ERR_SUCCESS)
+        if result_code == mqtt.MQTT_ERR_SUCCESS:
+            return
+        if result_code == mqtt.MQTT_ERR_NO_CONN:
+            self._connected.clear()
+            self._subscribed_topics.clear()
+            if self._connection_callback:
+                self._connection_callback()
+            raise RuntimeError("Blue Star MQTT client is not connected")
+        raise RuntimeError(f"Blue Star MQTT {action} failed: {mqtt.error_string(result_code)}")
 
     def _desired_topics(self) -> set[str]:
         topics: set[str] = set()
