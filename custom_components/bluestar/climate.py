@@ -24,6 +24,8 @@ from .models import ThingData
 ATTR_HVAC_MODE = "hvac_mode"
 ATTR_TEMPERATURE = "temperature"
 ENTITY_DOMAIN = "climate"
+POWER_PRESET_ON = "On"
+POWER_PRESET_OFF = "Off"
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -94,6 +96,7 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
     """Blue Star AC climate entity backed by AWS IoT shadow updates."""
 
     _attr_has_entity_name = True
+    _enable_turn_on_off_backwards_compatibility = False
 
     def __init__(
         self,
@@ -167,7 +170,12 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
         if thing is None:
             return ClimateEntityFeature(0)
 
-        features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
+        features = (
+            ClimateEntityFeature.TARGET_TEMPERATURE
+            | ClimateEntityFeature.TURN_ON
+            | ClimateEntityFeature.TURN_OFF
+            | ClimateEntityFeature.PRESET_MODE
+        )
         if thing.fan_options():
             features |= ClimateEntityFeature.FAN_MODE
         if self._vertical_swing_supported(thing):
@@ -323,6 +331,18 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
         return thing.fan_options().get(fan_value)
 
     @property
+    def preset_modes(self) -> list[str] | None:
+        # Home Assistant's climate widget has no dedicated power control slot.
+        return [POWER_PRESET_ON, POWER_PRESET_OFF]
+
+    @property
+    def preset_mode(self) -> str | None:
+        thing = self._thing
+        if thing is None:
+            return None
+        return POWER_PRESET_ON if _coerce_int(thing.state.raw.get("pow"), 0) == 1 else POWER_PRESET_OFF
+
+    @property
     def swing_modes(self) -> list[str] | None:
         thing = self._thing
         if thing is None or not self._vertical_swing_supported(thing):
@@ -363,6 +383,15 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
 
     async def async_turn_on(self) -> None:
         await self._runtime.async_execute_exact_command(self._thing_id, "power", {"value": True})
+
+    async def async_toggle(self) -> None:
+        thing = self._thing
+        if thing is None:
+            return
+        if _coerce_int(thing.state.raw.get("pow"), 0) == 1:
+            await self.async_turn_off()
+            return
+        await self.async_turn_on()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.OFF:
@@ -420,6 +449,13 @@ class BluestarClimateEntity(CoordinatorEntity[BluestarCoordinator], ClimateEntit
             if label == target:
                 await self._runtime.async_execute_exact_command(self._thing_id, "fan", {"value": value})
                 return
+
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        if preset_mode == POWER_PRESET_OFF:
+            await self.async_turn_off()
+            return
+        if preset_mode == POWER_PRESET_ON:
+            await self.async_turn_on()
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         thing = self._thing
