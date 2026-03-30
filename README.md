@@ -42,6 +42,12 @@ Once the repo is pushed to a public GitHub repository:
 
 Copy [custom_components/bluestar](/Users/sankarkumarhansdah/Projects/Bluestar/custom_components/bluestar) into your Home Assistant config directory under `custom_components/`, then restart Home Assistant.
 
+## Branding note
+
+The integration ships its own brand assets in [custom_components/bluestar/brand](/Users/sankarkumarhansdah/Projects/Bluestar/custom_components/bluestar/brand).
+
+Home Assistant only loads local custom integration brand images starting with `2026.3`. On older Home Assistant versions, the integration page will still show the generic placeholder image even though the icon files are present in this repository.
+
 ## Services
 
 The integration registers:
